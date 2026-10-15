@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #000; color: #00ff41; font-family: monospace; }
+        .reality-line { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #fff; box-shadow: 0 0 15px #fff; z-index: 10; }
+        canvas { display: block; width: 100%; height: 100%; }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <div class="p-4 border-b border-green-900 flex justify-between items-center bg-zinc-900">
+        <select id="pairSelect" onchange="sync()" class="bg-black border border-green-500 text-green-500 text-xs p-1">
+            <option value="EURUSD=X">EUR/USD OTC</option>
+            <option value="GBPUSD=X">GBP/USD OTC</option>
+            <option value="BTC-USD">BITCOIN</option>
+            <option value="GC=F">GOLD OTC</option>
+        </select>
+        <div id="price" class="text-xl font-bold">0.0000</div>
+    </div>
+
+    <div class="relative flex-grow bg-black">
+        <div class="reality-line"></div>
+        <div id="loader" class="absolute inset-0 flex items-center justify-center bg-black z-50 text-xs">INITIALIZING SENSORS...</div>
+        <canvas id="chart"></canvas>
+    </div>
+
+    <div class="p-6 border-t border-green-900 grid grid-cols-3 gap-2 text-center bg-zinc-900">
+        <div><div class="text-[8px] opacity-50">1M</div><div id="d1" class="font-bold">--</div></div>
+        <div><div class="text-[8px] opacity-50">2M</div><div id="d2" class="font-bold">--</div></div>
+        <div><div class="text-[8px] opacity-50">3M</div><div id="d3" class="font-bold">--</div></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('chart');
+        const ctx = canvas.getContext('2d');
+        
+        async function sync() {
+            const pair = document.getElementById('pairSelect').value;
+            document.getElementById('loader').style.display = 'flex';
+            
+            try {
+                const res = await fetch(`/api/vector/${pair}`);
+                const data = await res.json();
+                
+                if(data.status === "success") {
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('price').innerText = data.price.toFixed(5);
+                    draw(data);
+                } else {
+                    document.getElementById('loader').innerText = "DATA ERROR - RETRYING...";
+                }
+            } catch (e) {
+                document.getElementById('loader').innerText = "CONNECTION FAILED";
+            }
+        }
+
+        function draw(data) {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            const midX = canvas.width / 2;
+            const midY = canvas.height / 2;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            data.future.forEach((c, i) => {
+                const x = midX + 20 + (i * 60);
+                const isUp = c.c > c.o;
+                const color = isUp ? "#00ff41" : "#ff003c";
+                
+                ctx.strokeStyle = color;
+                ctx.fillStyle = color;
+                
+                // Wick
+                ctx.beginPath();
+                ctx.moveTo(x + 15, midY - (c.h - data.price) * 10000);
+                ctx.lineTo(x + 15, midY - (c.l - data.price) * 10000);
+                ctx.stroke();
+                
+                // Body
+                const h = (c.o - c.c) * 10000;
+                ctx.fillRect(x, midY - (c.o - data.price) * 10000, 30, h || 2);
+                
+                document.getElementById(`d${i+1}`).innerText = isUp ? "UP" : "DOWN";
+                document.getElementById(`d${i+1}`).style.color = color;
+            });
+        }
+
+        setInterval(sync, 10000); // Sync every 10s
+        sync();
+    </script>
+</body>
+</html>
